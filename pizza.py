@@ -1,6 +1,6 @@
 import time
 from functools import wraps
-from typing import Dict, List, Union
+from typing import Dict, List, Union, Type
 
 import click
 
@@ -8,13 +8,16 @@ import click
 class Pizza:
     """Class to represent a pizza"""
 
-    def __init__(self, name: str, ingredients: List[str],
-                 emoji: str | None = None):
+    def __init__(
+        self, name: str, ingredients: List[str], size: str, emoji: str = ""
+    ) -> None:
         """Initialize the Pizza object with a name,
         list of ingredients, and an optional emoji"""
         self.name = name
         self.ingredients = ingredients
-        self.emoji = emoji if emoji is not None else ""
+        self.size = size
+        self.emoji = emoji
+        self.available_sizes = ["L", "XL"]
 
     def dict(self) -> Dict[str, List[str]]:
         return {self.name: self.ingredients}
@@ -28,56 +31,71 @@ class Pizza:
         )
 
 
-class PizzaL(Pizza):
-    """Class to represent a large pizza"""
-
-    def __init__(self, name: str, ingredients: List[str],
-                 emoji: str | None = None):
-        """Initialize the PizzaL object"""
-        super().__init__(name, ingredients, emoji)
-        self.size = "L"
-
-
-class PizzaXL(Pizza):
-    """Class to represent a big pizza"""
-
-    def __init__(self, name: str, ingredients: List[str],
-                 emoji: str | None = None):
-        """Initialize the PizzaXL object"""
-        super().__init__(name, ingredients, emoji)
-        self.size = "XL"
+class Margherita(Pizza):
+    def __init__(self, size: str = "L"):
+        super().__init__(
+            self.__class__.__name__,
+            ["tomato sauce", "mozzarella", "tomatoes"],
+            size,
+            "🧀",
+        )
 
 
-menu: List[Union[PizzaL, PizzaXL]] = [
-    PizzaL("Margherita", ["tomato sauce", "mozzarella", "tomatoes"], "🧀"),
-    PizzaL("Pepperoni", ["tomato sauce", "mozzarella", "pepperoni"], "🍕"),
-    PizzaL("Hawaiian", ["tomato sauce", "mozzarella", "chicken", "pineapples"],
-           "🍍"),
-    PizzaXL("Margherita_big", ["tomato sauce", "mozzarella", "tomatoes"], "🧀"),
-    PizzaXL("Pepperoni_big", ["tomato sauce", "mozzarella", "pepperoni"], "🍕"),
-    PizzaXL("Hawaiian_big", ["tomato sauce", "mozzarella", "chicken",
-                             "pineapples"], "🍍"),
-]
+class Pepperoni(Pizza):
+    def __init__(self, size: str = "L"):
+        super().__init__(
+            self.__class__.__name__,
+            ["tomato sauce", "mozzarella", "pepperoni"],
+            size,
+            "🍕",
+        )
 
 
-def order_command(pizza: str, delivery: bool):
-    """Prepare and deliver or for pickup the specified pizza"""
-    for item in menu:
-        if item.name.lower() == pizza.lower():
-            bake(item)
-            if delivery:
-                delivery_pizza(item)
-            else:
-                pickup(item)
+class Hawaiian(Pizza):
+    def __init__(self, size: str = "L"):
+        super().__init__(
+            self.__class__.__name__,
+            ["tomato sauce", "mozzarella", "chicken", "pineapples"],
+            size,
+            "🍍",
+        )
 
 
-def show_menu_command():
-    """Display the menu of available pizzas"""
-    for pizza in menu:
+def pizza_types() -> List[Type[Pizza]]:
+    return [Margherita, Pepperoni, Hawaiian]
+
+
+def menu():
+    for pizza_type in pizza_types():
+        pizza = pizza_type()
         click.echo(
-            f"{pizza.name}{pizza.emoji} ({pizza.size}):"
+            f"{pizza.name}{pizza.emoji} ({pizza.available_sizes}):"
             f' {", ".join(pizza.ingredients)}'
         )
+
+
+def get_pizza(name: str, size: str) -> Union[Pizza, None]:
+    return next(
+        (
+            pizza_type(size)
+            for pizza_type in pizza_types()
+            if pizza_type.__name__ == name
+        ),
+        None,
+    )
+
+
+def order_command(pizza_name: str, size: str, delivery: bool):
+    """Prepare and deliver or for pickup the specified pizza"""
+    pizza = get_pizza(pizza_name, size)
+    if pizza is None:
+        print("Такой пиццы нет в меню")
+    else:
+        bake(pizza)
+        if delivery:
+            delivery_pizza(pizza)
+        else:
+            pickup(pizza)
 
 
 @click.group()
@@ -90,17 +108,19 @@ def cli():
 @click.option("--delivery", default=False, is_flag=True)
 @click.argument("pizza", nargs=1, type=str)
 def order(pizza: str, delivery: bool):
-    order_command(pizza, delivery)
+    size = input("Введите размер пиццы (например, L, XL): ")
+    order_command(pizza, size, delivery)
 
 
 @cli.command()
 def show_menu():
     """Show the available menu"""
-    show_menu_command()
+    menu()
 
 
 def log(template: str = "{} - {} с"):
     """Decorator to log the execution time of a function"""
+
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
@@ -117,22 +137,23 @@ def log(template: str = "{} - {} с"):
 
 
 @log("👨‍🍳 Приготовили за {1} c")
-def bake(pizza: Union[PizzaL, PizzaXL]):
+def bake(pizza):
     """Bake the pizza"""
     time.sleep(0.5)
 
 
 @log("🚚 Доставили за {1} с!")
-def delivery_pizza(pizza: Union[PizzaL, PizzaXL]):
+def delivery_pizza(pizza):
     """Deliver the pizza"""
     time.sleep(0.7)
 
 
 @log("🏠 Забрали за {1} с!")
-def pickup(pizza: Union[PizzaL, PizzaXL]):
+def pickup(pizza):
     """Pizza pickup"""
     time.sleep(0.3)
 
 
 if __name__ == "__main__":
     cli()
+    
